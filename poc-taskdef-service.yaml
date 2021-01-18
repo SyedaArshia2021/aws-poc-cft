@@ -96,7 +96,10 @@ Resources:
           MountPoints:
             - SourceVolume: poc  
               ReadOnly: 'false'
-              ContainerPath: "/var/www/html/"    
+              ContainerPath: "/var/www/html/"
+            - SourceVolume: nginxconfig
+              ReadOnly: 'false'
+              ContainerPath: "/etc/nginx/nginx.conf"   
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -114,9 +117,11 @@ Resources:
           Value: !Sub ${EnvironmentName}-poc
       Volumes: 
         - Host: 
-           SourcePath: "/var/www/html/"
+           SourcePath: "/var/www/html/poc-test-page"
           Name: poc     
-  
+        - Host: 
+           SourcePath: "/var/www/html/poc-test-page/config/nginx.conf"
+          Name: nginxconfig
   pocCloudWatchLogsGroup:
     Type: AWS::Logs::LogGroup
     Properties:
