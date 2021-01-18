@@ -141,7 +141,9 @@ Resources:
           sudo /usr/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:${ECSCloudWatchParameter} -s
           sudo mkdir -p /var/www/html/
           sudo chmod -R 7555 /var/www/html/
-          sudo clone 
+          sudo git clone https://arshimag%40gmail.com:India%401234567890@github.com/SyedaArshia2021/poc-test-page.git
+          sudo chmod -R 0777 poc-test-page/
+
     Metadata:
       AWS::CloudFormation::Init:
         config:
