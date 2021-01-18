@@ -1,0 +1,191 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: |-
+  POC-ENV  ECS SERVICE
+Parameters:
+  
+
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names
+    Type: String
+    Default: POC-ENV
+  VPC:
+    Type: AWS::EC2::VPC::Id
+    Default: POC-ECS
+    Description: Choose which VPC the Application Load Balancer should be deployed to
+
+  LoadBalancerArn:
+    Type: String
+    Default: arn:aws:elasticloadbalancing:ap-south-1:455274621725:loadbalancer/app/POC-ALB/27c43fe45a095088    
+  ECSCluster:
+    Type: String  
+    Default: POC-ECS
+  ALBListenerArn:
+    Type: String
+    Default: 'arn:aws:elasticloadbalancing:ap-south-1:455274621725:listener/app/POC-ENV/313292e2a57b4b0a/9a63e6c923bfba2a' 
+  ALBURL:
+    Type: String
+    Default: 'POC-ENV-783583462.ap-south-1.elb.amazonaws.com'    
+   
+Resources:
+  
+
+
+  TaskRoleECS:
+
+    Type: AWS::IAM::Role
+
+    Properties:
+
+      AssumeRolePolicyDocument:
+
+        Statement:
+
+        - Effect: Allow
+
+          Principal:
+
+            Service: [ecs-tasks.amazonaws.com]
+
+          Action: ['sts:AssumeRole']
+
+      Path: /
+
+      Policies:
+
+        - PolicyName: AmazonECSTaskExecutionRolePolicy
+
+          PolicyDocument:
+
+            Statement:
+
+            - Effect: Allow
+
+              Action:
+
+                # ECS Tasks to download images from ECR
+
+                - 'ecr:GetAuthorizationToken'
+
+                - 'ecr:BatchCheckLayerAvailability'
+
+                - 'ecr:GetDownloadUrlForLayer'
+
+                - 'ecr:BatchGetImage'
+
+                # ECS tasks to upload logs to CloudWatch
+
+                - 'logs:CreateLogStream'
+
+                - 'logs:PutLogEvents'
+
+              Resource: '*'
+  
+  pocTaskdefinition:
+    Type: 'AWS::ECS::TaskDefinition'
+    Properties:
+      RequiresCompatibilities:
+        - EC2
+      ContainerDefinitions:
+        - Name: nginx 
+          Image: nginx:latest
+          Essential: 'true'
+          PortMappings:
+            - HostPort: 80
+              Protocol: tcp
+              ContainerPort: 80
+          MountPoints:
+            - SourceVolume: poc  
+              ReadOnly: 'false'
+              ContainerPath: "/var/www/html/"    
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref pocCloudWatchLogsGroup
+              awslogs-region: !Ref AWS::Region 
+              awslogs-stream-prefix: poc         
+      ExecutionRoleArn: !Ref TaskRoleECS
+      TaskRoleArn: !Ref TaskRoleECS
+      NetworkMode: awsvpc
+      Cpu: '128'
+      Memory: '256'  
+      Family: !Sub ${EnvironmentName}-poc
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-poc
+      Volumes: 
+        - Host: 
+           SourcePath: "/var/www/html/"
+          Name: poc     
+  
+  pocCloudWatchLogsGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: '/ecs/poc/'
+      RetentionInDays: 365
+  
+  
+  pocService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref ECSCluster
+      ServiceName: !Sub ${EnvironmentName}-service
+      LaunchType: EC2
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets: 
+            - !ImportValue 
+              'Fn::Sub': '${EnvironmentName}-PrivateSubnet1'
+            - !ImportValue 
+              'Fn::Sub': '${EnvironmentName}-PrivateSubnet2'
+            - !ImportValue 
+              'Fn::Sub': '${EnvironmentName}-PrivateSubnet3'
+          SecurityGroups: 
+            - !ImportValue 
+              'Fn::Sub': '${EnvironmentName}-ECSHostSecurityGroup'
+      TaskDefinition: !Ref pocTaskdefinition
+      LoadBalancers:
+        - ContainerName: nginx
+          ContainerPort: 80
+          TargetGroupArn: !Ref pocTargetGroup
+      DesiredCount: 1 
+  
+  pocTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref VPC
+      Port: 80
+      Protocol: HTTP
+      TargetType: ip
+      Matcher:
+        HttpCode: 200
+      Name: !Sub '${EnvironmentName}-service-TG'
+      HealthCheckIntervalSeconds: 120
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 100
+      HealthyThresholdCount: 2
+  
+  pocListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref ALBListenerArn
+      Priority: 1
+      Conditions: 
+        - Field: host-header
+          Values: 
+            - !Ref ALBURL
+      Actions:
+        - TargetGroupArn: !Ref pocTargetGroup
+          Type: forward
+        
+
+
+
+Outputs:
+  pocTargetGroup:
+    Description: A reference to a port 80 listener
+    Value: !Ref pocTargetGroup  
+    Export:
+      Name: !Sub '${EnvironmentName}-HTTPListerner'
+                       
