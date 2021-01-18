@@ -1,0 +1,486 @@
+Description: >
+  This template deploys a VPC, with a pair of public and private subnets spread 
+  across two Availabilty Zones. It deploys an Internet Gateway, with a default 
+  route on the public subnets. It deploys a pair of NAT Gateways (one in each AZ), 
+  and default routes for them in the private subnets.
+
+Parameters:
+  
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names
+    Type: String
+
+  VpcCIDR:
+    Description: Please enter the IP range (CIDR notation) for this VPC
+    Type: String
+    Default: 10.0.0.0/16
+
+  PublicSubnet1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+    Default: 10.0.0.0/24
+
+  PublicSubnet2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the second Availability Zone
+    Type: String
+    Default: 10.0.1.0/24
+  
+  PublicSubnet3CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the second Availability Zone
+    Type: String
+    Default: 10.0.4.0/24
+  
+  PrivateSubnet1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the private subnet in the first Availability Zone
+    Type: String
+    Default: 10.0.2.0/24
+
+  PrivateSubnet2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the private subnet in the second Availability Zone
+    Type: String
+    Default: 10.0.3.0/24
+  
+  PrivateSubnet3CIDR:
+    Description: Please enter the IP range (CIDR notation) for the private subnet in the second Availability Zone
+    Type: String
+    Default: 10.0.5.0/24  
+
+#########################################NAT/BASTON HOST ###############################################################   
+
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the ECS instance
+
+Mappings:
+  AWSInstanceType2Virt:
+    t2.micro:
+      Virt: HVM
+    t2.small:
+      Virt: HVM
+    t2.medium:
+      Virt: HVM
+    t3.micro:
+      Virt: HVM
+    m3.medium:
+      Virt: HVM
+    m3.large:
+      Virt: HVM
+    m3.xlarge:
+      Virt: HVM
+    m3.2xlarge:
+      Virt: HVM
+  AWSRegionVirt2AMI:
+    us-east-1:
+      PVM: ami-50842d38
+      HVM: ami-08842d60
+    us-west-2:
+      PVM: ami-af86c69f
+      HVM: ami-8786c6b7
+    us-west-1:
+      PVM: ami-c7a8a182
+      HVM: ami-cfa8a18a
+    eu-west-1:
+      PVM: ami-9c7ad8eb
+      HVM: ami-6e7bd919
+    ap-northeast-1:
+      HVM: ami-35072834
+    ap-southeast-1:
+      HVM: ami-01aa6d985f124ba03
+    ap-southeast-2:
+      HVM: ami-07d9590ae1a0ec330
+    ap-south-1:
+      HVM: ami-00999044593c895de 
+Resources:
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Ref EnvironmentName
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Ref EnvironmentName
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: !Ref PublicSubnet1CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Public Subnet (AZ1)
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: !Ref PublicSubnet2CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Public Subnet (AZ2)
+
+  PublicSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [2, !GetAZs ""]
+      CidrBlock: !Ref PublicSubnet3CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Public Subnet (AZ3)        
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: !Ref PrivateSubnet1CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Private Subnet (AZ1)
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: !Ref PrivateSubnet2CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Private Subnet (AZ2)
+
+  PrivateSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [2, !GetAZs ""]
+      CidrBlock: !Ref PrivateSubnet3CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Private Subnet (AZ3)        
+
+  NatGateway1EIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway2EIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway3EIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc    
+
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway1EIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+
+  NatGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway2EIP.AllocationId
+      SubnetId: !Ref PublicSubnet2
+
+  NatGateway3:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway3EIP.AllocationId
+      SubnetId: !Ref PublicSubnet3    
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Public Routes
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet1
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet2
+
+  PublicSubnet3RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet3
+
+  PrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Private Routes (AZ1)
+
+  DefaultPrivateRoute1:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway1
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      SubnetId: !Ref PrivateSubnet1
+
+  PrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Private Routes (AZ2)
+
+  DefaultPrivateRoute2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway2
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      SubnetId: !Ref PrivateSubnet2
+
+  PrivateRouteTable3:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Private Routes (AZ3)
+
+  DefaultPrivateRoute3:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable3
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway3
+
+  PrivateSubnet3RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable3
+      SubnetId: !Ref PrivateSubnet3
+  ################################### NAT/Baston Host ########################################################
+  
+  IPAddress:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: vpc
+      InstanceId: !Ref BastionHost
+  
+  NATSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VPC
+      GroupDescription: Access to the ECS HOSTS via NAT Instance
+      SecurityGroupIngress:
+        # Allow access from anywhere to our ECS services
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-NAT-HOST-SG
+
+  BastionHostFullAccess:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/IAMFullAccess
+  
+  MyInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
+      Roles:
+        - Ref: BastionHostFullAccess  
+  
+  BastionHost:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      InstanceType: t2.micro
+      IamInstanceProfile:
+        Ref: MyInstanceProfile
+      ImageId: !FindInMap
+        - AWSRegionVirt2AMI
+        - !Ref 'AWS::Region'
+        - !FindInMap 
+          - AWSInstanceType2Virt
+          - t3.micro
+          - Virt
+      SecurityGroupIds:
+        - !Ref NATSecurityGroup
+      SubnetId: 
+          Ref: "PublicSubnet1"
+      KeyName: !Ref KeyName
+      UserData: !Base64 
+        'Fn::Join':
+          - ''
+          - - |
+              #!/bin/bash -v
+            - |
+              yum update -y aws-cfn-bootstrap
+            - |
+              
+            - |
+              aws --region ${aws::Region} iam create-service-linked-role --aws-service-name es.amazonaws.com
+            - |
+              # Helper function
+            - |
+              function error_exit
+            - |
+              {
+            - '  /opt/aws/bin/cfn-signal -e 1 -r "$1" '''
+            - !Ref BastionHostHandle
+            - |
+              '
+            - |2
+                exit 1
+            - |
+              }
+              # All is well so signal success
+            - /opt/aws/bin/cfn-signal -e 0 -r "Server setup complete" '
+            - !Ref BastionHostHandle
+            - |
+              '
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-NAT
+  
+  BastionHostHandle:
+    Type: 'AWS::CloudFormation::WaitConditionHandle'
+  
+  ControllerCondition:
+    Type: 'AWS::CloudFormation::WaitCondition'
+    DependsOn: BastionHost
+    Properties:
+      Handle: !Ref BastionHostHandle
+      Timeout: '900'
+
+Outputs:
+
+  StackName:
+    Description: This is the stack name.
+    Value: !Ref 'AWS::StackName'
+    Export:
+      Name: !Sub '${AWS::StackName}-StackName'
+
+  EnvironmentName:
+    Description: This is the EnvironmentName name.
+    Value: !Ref EnvironmentName
+    Export:
+      Name: !Sub '${EnvironmentName}'   
+  VPC:
+    Description: A reference to the created VPC
+    Value: !Ref VPC
+
+  PublicSubnets:
+    Description: A list of the public subnets
+    Value: !Join [",", [!Ref PublicSubnet1, !Ref PublicSubnet2, !Ref PublicSubnet3]]
+
+  PrivateSubnets:
+    Description: A list of the private subnets
+    Value: !Join [",", [!Ref PrivateSubnet1, !Ref PrivateSubnet2, !Ref PrivateSubnet3]]
+
+  NATSecurityGroup:
+    Description: A reference to the security group for ECS hosts
+    Value: !Ref NATSecurityGroup
+      
+
+  InstanceID:
+    Value: !Ref BastionHost
+    Description: Bastion Instance ID
+  
+  IPAddress:
+    Value: !Ref IPAddress
+    Description: Public IP address of NAT instance
+
+  PrivateSubnet3:
+    Value: !Ref PrivateSubnet3
+    Export:
+      Name: !Sub '${EnvironmentName}-PrivateSubnet3'
+
+  PrivateSubnet2:
+    Value: !Ref PrivateSubnet2
+    Export:
+      Name: !Sub '${EnvironmentName}-PrivateSubnet2'  
+
+  PrivateSubnet1:
+    Value: !Ref PrivateSubnet1
+    Export:
+      Name: !Sub '${EnvironmentName}-PrivateSubnet1'
+
+  PublicSubnet3:
+    Value: !Ref PublicSubnet3
+    Export:
+      Name: !Sub '${EnvironmentName}-PublicSubnet3'
+
+  PublicSubnet2:
+    Value: !Ref PublicSubnet2
+    Export:
+      Name: !Sub '${EnvironmentName}-PublicSubnet2' 
+  
+  PublicSubnet1:
+    Value: !Ref PublicSubnet1
+    Export:
+      Name: !Sub '${EnvironmentName}-PublicSubnet1' 
